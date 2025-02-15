@@ -7,7 +7,7 @@ const readline = require('node:readline');
 // Set up configuiration handling first load file, then override with environment variables
 const VERSION = '0.9.2' // getCAT version
 const CONFIG = {} // In memory config object
-const CONFIG_FIELDS = { ROOTCAPATH: null, NODETLSIGNORE: false, AUTHSYSTEMNAME: null, AUTHUSERNAME: null, AUTHTOKENFILE: null, AUTHTOKENSTRING: null, REQUESTAUTHURL: null, REQUESTTOKENURL: null} // Allowed config fields
+const CONFIG_FIELDS = { ROOTCAPATH: null, NODETLSIGNORE: false, AUTHSYSTEMNAME: null, AUTHUSERNAME: null, AUTHTOKENFILE: false, AUTHTOKENSTRING: null, REQUESTAUTHURL: null, REQUESTTOKENURL: null} // Allowed config fields
 
 // Define class variables
 let tokenForSystem = null
