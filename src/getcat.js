@@ -7,7 +7,7 @@ const crypto = require('crypto')
 const readline = require('node:readline') // DOCS: https://nodejs.org/api/readline.html#readlinepromisescreateinterfaceoptions
 const eventEmitter = require('events')
 // Set up configuiration handling first load file, then override with environment variables
-const VERSION = '0.9.2' // getCAT version
+const VERSION = '0.9.3' // getCAT version
 const CONFIG = {} // In memory config object
 const CONFIG_FIELDS = { ROOTCAPATH: null, NODETLSIGNORE: false, AUTHSYSTEMNAME: null, AUTHUSERNAME: null, AUTHTOKENFILE: null, AUTHTOKENSTRING: null, REQUESTAUTHURL: null, REQUESTTOKENURL: null} // Allowed config fields
 
