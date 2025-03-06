@@ -2,17 +2,21 @@
 const process = require('process')
 const fs = require('fs')
 const path = require('path')
+const util = require('util')
 const crypto = require('crypto')
-const readline = require('node:readline');
+const readline = require('node:readline') // DOCS: https://nodejs.org/api/readline.html#readlinepromisescreateinterfaceoptions
+const eventEmitter = require('events')
 // Set up configuiration handling first load file, then override with environment variables
 const VERSION = '0.9.2' // getCAT version
 const CONFIG = {} // In memory config object
-const CONFIG_FIELDS = { ROOTCAPATH: null, NODETLSIGNORE: false, AUTHSYSTEMNAME: null, AUTHUSERNAME: null, AUTHTOKENFILE: false, AUTHTOKENSTRING: null, REQUESTAUTHURL: null, REQUESTTOKENURL: null} // Allowed config fields
+const CONFIG_FIELDS = { ROOTCAPATH: null, NODETLSIGNORE: false, AUTHSYSTEMNAME: null, AUTHUSERNAME: null, AUTHTOKENFILE: null, AUTHTOKENSTRING: null, REQUESTAUTHURL: null, REQUESTTOKENURL: null} // Allowed config fields
 
 // Define class variables
 let tokenForSystem = null
 let tokenForIdent = null
 let tokenBase64 = null
+let pipedDataArray = new Array()
+let pipedDataDone = false
 
 // Update the derivied values from config
 function updateConfigDerivedValues() {
@@ -21,6 +25,12 @@ function updateConfigDerivedValues() {
   tokenForIdent = CONFIG['AUTHUSERNAME'] // If set, userID in a session key
   // If TLS ignore enabled, employ TLS node workaorund
   process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = (CONFIG['NODETLSIGNORE']===true? 0 : 1 ) // Enforce or disable TLS check
+  // Enable root CA if file path specified
+  const rootCaPath = CONFIG['ROOTCAPATH']
+  if (rootCaPath!==null) {
+    if (fs.existsSync(rootCaPath)==false) throw new Error(`Invalid CA ROOT file found at provided path: "${rootCaPath}" Please verify that file is a valid root CA.`)
+    process.env['NODE_EXTRA_CA_CERTS'] = CONFIG['ROOTCAPATH']
+  }
   // If debugging, display config object after derivied values
   if (process.env['DEBUG']=='1' || process.env['DEBUG']=='true') { console.log(CONFIG) }
 }
@@ -73,6 +83,36 @@ function checkForCertificateError(errorMessage) {
     }
     console.warn('\tAlternatively disable TLS checking by setting env NODE_TLS_REJECT_UNAUTHORIZED to 0 or getcat CONFIG.NODETLSIGNORE to true')
   }
+}
+// Allow processing of any piped information
+async function processPipedStandardInput(encoding='utf-8', startupMsWait=10) {
+
+  process.stdin.resume()
+  process.stdin.setEncoding(encoding)
+
+  let partialLine = ''
+  const emitter = new eventEmitter()
+
+  process.stdin.on('data', (data) => {
+    const buffer = partialLine + data
+    const newLines = buffer.split('\n')
+    partialLine = newLines.pop() || ''
+    pipedDataArray.push(...newLines)
+    if (pipedDataArray.length) emitter.emit('data')
+  })
+
+  process.stdin.on('end', () => {
+    process.stdin.destroy()
+    pipedDataDone = true // Record done reading stdin
+  })
+
+      // If no data detected within startupMsWait, assume no data on stdin
+  setTimeout( function() {
+    if (pipedDataArray.length==0) {
+      process.stdin.destroy()
+      pipedDataDone = true // Record done reading stdin
+    }
+  }, startupMsWait)
 }
 
 // Mimic bash style command line help
@@ -148,7 +188,6 @@ function processCommandlineArguments(processArguments) {
           // Override function to hide password entered
           readlineHandler._writeToOutput = function _writeToOutput(stringToWrite) { readlineHandler.output.write("*") } 
 
-
           // Write to file? getcat.file.writeJsonToFile(CONFIG, savefilepath)
           // Or use env ? AUTHTOKENSTRING
           break;
@@ -223,13 +262,12 @@ const getcat = {
         })
       },
       requestPostAndWaitForResponseWithToken: async function(method, authTokenString, systemUrl, postJsonObject, klientId='getcat-'+VERSION, acceptType='application/json', contentType='application/json') {
+
         let options = {
           'method': method,
           'url': systemUrl,
           'headers': {
             'Klientid': klientId,
-            'Korrelasjonsid': getcat.misc.uuid(), // Eksempel: 'f49fb193-4cb6-4bb8-a3da-71797eb7d6da',
-            'Meldingsid': getcat.misc.uuid(), // Eksempel: 'e7f28c16-bb3b-4125-9886-d8b1de9f5201',
             'Content-Type': contentType,
             'Accept': acceptType,
             'Authorization': authTokenString
@@ -346,6 +384,36 @@ const getcat = {
       return authToken
     }
   },
+  /* STANDARD IN - PIPING*/
+  stdin : {
+    async waitForDataComplete() {
+      return getcat.waiting.doUntilTrue( () => (pipedDataDone==true), 5) // Polling every 5 ms
+    },
+    async getStringWait() {
+      return getcat.stdin.waitForDataComplete().then( () => pipedDataArray.join('\n'))
+    },
+    async getArrayWait() {
+      return getcat.stdin.waitForDataComplete().then( () => pipedDataArray)
+    },
+    // Will return a next()-iterator until done() is true
+    // NOTE: For larger files, waiting for data to complete first is more predictable: stdin.waitForDataComplete
+    getLines : function*() {
+      let linesFound = -1
+
+      while (linesFound<pipedDataArray.length || pipedDataDone==false) {
+        linesFound++
+        yield pipedDataArray[linesFound]
+      }
+      yield // Ending with empty line
+    },
+    // NOTE: Will return raw line input as it is read from stdin
+    getLineString(lineIndex) {
+      return pipedDataArray[lineIndex]
+    },
+    getLineCount() {
+      return pipedDataArray.length
+    }
+  },
   /* DATETIME */
   datetime : {
     addMilliSeconds(dateObject, numberOfMs) {
@@ -361,6 +429,33 @@ const getcat = {
     // Calculate the duration in ms
     getDurationMs : function(fromDate, toDate) {
       return (toDate.getTime() - fromDate.getTime())
+    }
+  },
+  /* Waiting helpers */
+  waiting: {
+    // Poll function until non false outcome
+    doUntilTrue: async function (conditionFunction, pollIntervalMs=5000) {
+      const checkPoll = resolve => {
+        let funcResult = conditionFunction.apply()
+        const isPromisePending = util.inspect(funcResult).includes('pending')
+        if (isPromisePending===false) {
+          if (funcResult!==false) {
+            return resolve(funcResult)
+          }
+          setTimeout(_ => checkPoll(resolve), parseInt(pollIntervalMs, 10))
+        }
+        else {
+          funcResult.then( (output) => {
+            if (output!==false) { return resolve(output) }
+            setTimeout(_ => checkPoll(resolve), parseInt(pollIntervalMs, 10))
+          })
+        }
+      }
+      return new Promise(checkPoll)
+    },
+    // Return a delayed promise
+    delayAsync : async function(delaysMs) {
+      return new Promise(resolve => setTimeout(resolve, delaysMs))
     }
   },
   /* MISC supporting methods */
@@ -431,5 +526,8 @@ const getcat = {
 
 // Export to outside script usage
 module.exports = getcat
+
 // Enable command line argument handling
 processCommandlineArguments(process.argv)
+// And process any stdin/piped data
+processPipedStandardInput()
