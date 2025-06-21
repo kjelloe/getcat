@@ -1,0 +1,20 @@
+{
+  "name": "getcat",
+  "version": "0.96.0",
+  "description": "A lightweight and simple headless http klient for using in testing debug akin to bruno or postman",
+  "main": "src/getcat.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node src/getcat.js",
+    "test": "mocha"
+  },
+  "devDependencies": {
+    "express": "4.21",
+    "mocha": "*",
+    "supertest": "*"
+  },
+  "author": "Kjell <kjelloe@gmail.com>",
+  "license": "MIT"
+}
