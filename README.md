@@ -19,3 +19,8 @@ const getcat = require('../src/getcat.js');
 
 ```
 If you want to run the script directly from commandline, allow exection i.e chmod +x ./myscript.js
+
+## Tests
+In order to self test getcat, do npm install and run npm test
+
+TODO: Examples and description of tests
