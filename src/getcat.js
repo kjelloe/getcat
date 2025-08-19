@@ -247,11 +247,11 @@ const getcat = {
     _inner : {
       requestPostAndWaitForResponse: async function(method, systemUrl, postJsonObject, klientId, acceptType, contentType) {
         const envSTokenPath = (CONFIG.AUTHTOKENSTRING? CONFIG.AUTHTOKENSTRING : CONFIG.AUTHTOKENFILE)  // if tokenstring is enabled, use it instead of file
-        if (tokenBase64!==null && tokenBase64.length>0) {   // If basic auth is used, apply base64 string
+		if (tokenBase64!==null && tokenBase64.length>0) {   // If basic auth is used, apply base64 string
           return getcat.requests._inner.requestPostAndWaitForResponseWithToken(method, tokenBase64, systemUrl, postJsonObject, klientId, acceptType, contentType)
         }
-        if (envSTokenPath===false) { // If tokenfile is disabled, skip and do request
-          return getcat.requests._inner.requestPostAndWaitForResponseWithToken(method, false, systemUrl, postJsonObject, klientId, acceptType, contentType)
+        if (getcat.misc.stringToBoolean(envSTokenPath)===false) { // If tokenfile is disabled, skip and do request
+		  return getcat.requests._inner.requestPostAndWaitForResponseWithToken(method, false, systemUrl, postJsonObject, klientId, acceptType, contentType)
         }
         // Proceed to using auth token file or auth string
         if (envSTokenPath==null) throw new Error(`CONFIG.AUTHTOKENFILE ${(envSTokenPath==null? 'er ikke satt. Gjøres i config eller med environment variabel f.eks export AUTHTOKENFILE="/home/m12345/.stinkytoken.key". ' : `"${envSTokenPath}" finnes ikke.`)}`)
@@ -262,6 +262,9 @@ const getcat = {
         })
       },
       requestPostAndWaitForResponseWithToken: async function(method, authTokenString, systemUrl, postJsonObject, klientId='getcat-'+VERSION, acceptType='application/json', contentType='application/json') {
+
+        // Forms compatibility workaround
+        if (contentType=='application/x-www-form-urlencoded') { postJsonObject = getcat.misc.toUrlEncoded(postJsonObject) }
 
         let options = {
           'method': method,
@@ -472,7 +475,19 @@ const getcat = {
     },
     base64Decode : function(strCoded) {
       return Buffer.from(strCoded).toString('utf8')
-    }
+    },
+    stringToBoolean: function(str) {
+		if (typeof str !== 'string') { return Boolean(str) } // Handles falsy values i.e null, undefined, 0
+		const lowerStr = str.toLowerCase()
+		return (lowerStr === 'true' || lowerStr === '1' || lowerStr === 'yes' || lowerStr === 'on')
+    },
+    toUrlEncoded: function(someObject) {
+	  const params = new URLSearchParams()
+	  for (const [key, value] of Object.entries(someObject)) {
+		params.append(key, value)
+	  }
+	  return params.toString()
+	}
   },
   /* FILE */
   file : {
