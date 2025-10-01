@@ -62,13 +62,13 @@ loadConfig()
 // Storing debugging information
 let lastResponse = null
 // Handle extra headers as default
-const defaultHeaders = new Array()
+let defaultHeaders = new Array()
 
 function addDefaultHeader(key, value) {
   defaultHeaders.push({ key, value })
 }
 function removeDefaultHeader(key) {
-  const newArray = removeDefaultHeader.filter( h => (h.key !== key))
+  const newArray = defaultHeaders.filter( h => (h.key !== key))
   defaultHeaders = newArray
 }
 
