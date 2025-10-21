@@ -71,6 +71,9 @@ function removeDefaultHeader(key) {
   const newArray = defaultHeaders.filter( h => (h.key !== key))
   defaultHeaders = newArray
 }
+function listHeaders() {
+  return defaultHeaders.map( h => `"${h.key}":"${h.value}"`)
+}
 
 // NOTE: Disabling TLS check for all certificates to allow for self signed ones used in test.
 function checkForCertificateError(errorMessage) {
@@ -186,8 +189,7 @@ function processCommandlineArguments(processArguments) {
           })
 
           // Override function to hide password entered
-          readlineHandler._writeToOutput = function _writeToOutput(stringToWrite) { readlineHandler.output.write("*") } 
-
+          readlineHandler._writeToOutput = function _writeToOutput(stringToWrite) { readlineHandler.output.write("*") }
           // Write to file? getcat.file.writeJsonToFile(CONFIG, savefilepath)
           // Or use env ? AUTHTOKENSTRING
           break;
@@ -238,7 +240,8 @@ const getcat = {
     },
     headers : {
       addDefault: function(key, value) { addDefaultHeader(key, value) },
-      removeDefault: function(key) { removeDefaultHeader(key) }
+      removeDefault: function(key) { removeDefaultHeader(key) },
+      list: function() { return listHeaders() }
     },
     // TODO: Make a lastresponse that handles concurrency better or returns status with response body
     getLastResponse: function() {
@@ -437,19 +440,22 @@ const getcat = {
   /* Waiting helpers */
   waiting: {
     // Poll function until non false outcome
-    doUntilTrue: async function (conditionFunction, pollIntervalMs=5000) {
+    doUntilTrue: async function (conditionFunction, pollIntervalMs=5000, maxTimeoutMs=null) {
+      let startedPoll = new Date()
+      let durationMs = null
       const checkPoll = resolve => {
-        let funcResult = conditionFunction.apply()
+        if (maxTimeoutMs!==null) { durationMs = getcat.datetime.getDurationMs(startedPoll, new Date()) }
+        let funcResult = conditionFunction.apply(null, [durationMs])
         const isPromisePending = util.inspect(funcResult).includes('pending')
         if (isPromisePending===false) {
-          if (funcResult!==false) {
-            return resolve(funcResult)
-          }
+          if (funcResult!==false) { return resolve(funcResult) }
+          if (durationMs>maxTimeoutMs) { return resolve('maxTimeoutMs reached') }
           setTimeout(_ => checkPoll(resolve), parseInt(pollIntervalMs, 10))
         }
         else {
           funcResult.then( (output) => {
             if (output!==false) { return resolve(output) }
+            if (durationMs>maxTimeoutMs) { return resolve('maxTimeoutMs reached') }
             setTimeout(_ => checkPoll(resolve), parseInt(pollIntervalMs, 10))
           })
         }
