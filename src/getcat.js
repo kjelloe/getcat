@@ -190,6 +190,7 @@ function processCommandlineArguments(processArguments) {
 
           // Override function to hide password entered
           readlineHandler._writeToOutput = function _writeToOutput(stringToWrite) { readlineHandler.output.write("*") }
+
           // Write to file? getcat.file.writeJsonToFile(CONFIG, savefilepath)
           // Or use env ? AUTHTOKENSTRING
           break;
@@ -306,7 +307,7 @@ const getcat = {
           const fetchOptions = { method: options.method, headers: options.headers }
           if (options.method.toUpperCase()!=='GET') { fetchOptions.body = options.body } // Set request BODY for all methods but GET
           const response = await fetch(options.url, fetchOptions)
-          lastResponse = { 'statusCode': response.status } // For assertions
+          lastResponse = { 'statusCode': response.status, 'method' : options.method, 'url' : options.url } // For assertions
           if (response.status > 299) {
             getcat.log.warn(`"${options.method} towards "${options.url}" failed with statusCode "${(response? response.status : error.status)}" failed with error`)
           }
